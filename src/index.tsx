@@ -685,6 +685,7 @@ app.get('/', (c) => {
         </div>
 
         <script src="/static/app.js"></script>
+        <script src="/static/app-v1.2.js"></script>
     </body>
     </html>
   `)
