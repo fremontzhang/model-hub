@@ -377,6 +377,31 @@ app.get('/api/stats/costs', async (c) => {
   }
 })
 
+// 获取按场景统计的数据
+app.get('/api/stats/by-scenario', async (c) => {
+  try {
+    const days = parseInt(c.req.query('days') || '30')
+    
+    const { results } = await c.env.DB.prepare(`
+      SELECT 
+        scenario,
+        COUNT(*) as call_count,
+        SUM(total_cost) as total_cost,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        AVG(latency) as avg_latency
+      FROM usage_logs
+      WHERE created_at >= DATE('now', '-' || ? || ' days')
+      GROUP BY scenario
+      ORDER BY call_count DESC
+    `).bind(days).all()
+    
+    return c.json({ success: true, data: results })
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message }, 500)
+  }
+})
+
 // 获取调用日志
 app.get('/api/logs', async (c) => {
   try {
@@ -439,6 +464,41 @@ app.get('/api/active-model', async (c) => {
     }
     
     return c.json({ success: true, data: results[0] })
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message }, 500)
+  }
+})
+
+// 获取所有场景的激活模型配置
+app.get('/api/active-models/all', async (c) => {
+  try {
+    const { results } = await c.env.DB.prepare(`
+      SELECT 
+        a.scenario,
+        a.updated_at,
+        m.id as model_id,
+        m.display_name,
+        m.model_id as model_identifier,
+        m.model_type,
+        p.id as provider_id,
+        p.name as provider_name,
+        p.logo_url,
+        p.access_type,
+        pr.input_price,
+        pr.output_price
+      FROM active_model_config a
+      JOIN models m ON a.model_id = m.id
+      JOIN model_providers p ON m.provider_id = p.id
+      LEFT JOIN pricing_rules pr ON m.id = pr.model_id AND pr.is_current = 1
+      ORDER BY 
+        CASE a.scenario
+          WHEN 'default' THEN 1
+          ELSE 2
+        END,
+        a.scenario
+    `).all()
+    
+    return c.json({ success: true, data: results })
   } catch (error: any) {
     return c.json({ success: false, error: error.message }, 500)
   }
@@ -607,13 +667,9 @@ app.get('/', (c) => {
                                 <i class="fas fa-chart-bar w-5"></i>
                                 <span class="font-medium">统计分析</span>
                             </a>
-                            <a href="#" class="nav-link flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700" data-page="logs">
-                                <i class="fas fa-list w-5"></i>
-                                <span class="font-medium">调用日志</span>
-                            </a>
                             <a href="#" class="nav-link flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700" data-page="switch">
                                 <i class="fas fa-exchange-alt w-5"></i>
-                                <span class="font-medium">模型切换</span>
+                                <span class="font-medium">场景路由</span>
                             </a>
                         </nav>
                     </div>

@@ -393,7 +393,11 @@ async function renderModels() {
   content.innerHTML = showLoading();
   
   try {
-    const response = await fetch('/api/models');
+    // 如果有指定厂商ID，只查询该厂商的模型
+    const url = window.currentProviderId 
+      ? `/api/models?provider_id=${window.currentProviderId}`
+      : '/api/models';
+    const response = await fetch(url);
     const result = await response.json();
     
     if (!result.success) {
@@ -429,6 +433,7 @@ async function renderModels() {
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">模型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">厂商</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">接入类型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上下文长度</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">计费</th>
@@ -446,10 +451,13 @@ async function renderModels() {
                     </div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center space-x-2">
-                      <span class="text-sm text-gray-800">${model.provider_name}</span>
-                      ${model.access_type === 'proxy' ? '<span class="badge badge-info">代理</span>' : ''}
-                    </div>
+                    <span class="text-sm text-gray-800">${model.provider_name}</span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="badge ${model.access_type === 'direct' ? 'badge-success' : 'badge-info'}">
+                      <i class="fas ${model.access_type === 'direct' ? 'fa-link' : 'fa-network-wired'} mr-1"></i>
+                      ${model.access_type === 'direct' ? '直连原厂' : '代理商'}
+                    </span>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span class="badge ${model.model_type === 'multimodal' ? 'badge-info' : 'badge-success'}">
@@ -1108,9 +1116,188 @@ async function selectModelForSwitch(modelId, modelName) {
   showSwitchModal();
 }
 
-// 占位函数（后续可实现）
+// 显示添加厂商模态框
 function showAddProviderModal() {
-  alert('添加厂商功能开发中...');
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 my-8">
+      <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-xl font-bold text-gray-800">
+          <i class="fas fa-plus-circle mr-2 text-indigo-600"></i>
+          添加模型厂商
+        </h3>
+        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <form id="addProviderForm" class="p-6 space-y-4">
+        <!-- 基本信息 -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-building mr-1 text-indigo-600"></i>
+              厂商名称 <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="providerName" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="如：OpenAI">
+          </div>
+          
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-tag mr-1 text-indigo-600"></i>
+              厂商标识 (slug) <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="providerSlug" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="如：openai">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-image mr-1 text-indigo-600"></i>
+            Logo URL
+          </label>
+          <input type="url" id="providerLogo" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="https://cdn.simpleicons.org/openai">
+        </div>
+
+        <!-- 接入类型 -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-network-wired mr-1 text-indigo-600"></i>
+            接入类型 <span class="text-red-500">*</span>
+          </label>
+          <select id="accessType" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            <option value="direct">直连原厂</option>
+            <option value="proxy">代理商</option>
+          </select>
+        </div>
+
+        <!-- 代理商名称（条件显示） -->
+        <div id="proxyNameDiv" class="hidden">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-user-tie mr-1 text-indigo-600"></i>
+            代理商名称
+          </label>
+          <input type="text" id="proxyName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="如：硅基流动">
+        </div>
+
+        <!-- API 配置 -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-link mr-1 text-indigo-600"></i>
+            API Base URL <span class="text-red-500">*</span>
+          </label>
+          <input type="url" id="apiBaseUrl" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="https://api.openai.com/v1">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-key mr-1 text-indigo-600"></i>
+            API Key <span class="text-red-500">*</span>
+          </label>
+          <input type="password" id="apiKey" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="sk-...">
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-shield-alt mr-1 text-indigo-600"></i>
+              认证方式
+            </label>
+            <select id="authType" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+              <option value="bearer">Bearer Token</option>
+              <option value="api_key">API Key</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-sort-numeric-up mr-1 text-indigo-600"></i>
+              优先级
+            </label>
+            <input type="number" id="priority" value="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="flex justify-end space-x-3 pt-4 border-t">
+          <button type="button" onclick="this.closest('.fixed').remove()" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium">
+            <i class="fas fa-times mr-2"></i>取消
+          </button>
+          <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold">
+            <i class="fas fa-check mr-2"></i>确认添加
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // 监听接入类型变化
+  document.getElementById('accessType').addEventListener('change', function() {
+    const proxyDiv = document.getElementById('proxyNameDiv');
+    if (this.value === 'proxy') {
+      proxyDiv.classList.remove('hidden');
+    } else {
+      proxyDiv.classList.add('hidden');
+    }
+  });
+  
+  // 表单提交
+  document.getElementById('addProviderForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const data = {
+      name: document.getElementById('providerName').value,
+      slug: document.getElementById('providerSlug').value,
+      logo_url: document.getElementById('providerLogo').value || null,
+      access_type: document.getElementById('accessType').value,
+      proxy_name: document.getElementById('accessType').value === 'proxy' ? document.getElementById('proxyName').value : null,
+      api_base_url: document.getElementById('apiBaseUrl').value,
+      api_key: document.getElementById('apiKey').value,
+      auth_type: document.getElementById('authType').value,
+      priority: parseInt(document.getElementById('priority').value)
+    };
+    
+    try {
+      const response = await fetch('/api/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // 显示成功提示
+        const successDiv = document.createElement('div');
+        successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+        successDiv.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-check-circle text-2xl"></i>
+            <div>
+              <p class="font-semibold">厂商添加成功！</p>
+              <p class="text-sm">${data.name}</p>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(successDiv);
+        
+        setTimeout(() => {
+          successDiv.remove();
+        }, 3000);
+        
+        modal.remove();
+        renderProviders();
+      } else {
+        alert('❌ 添加失败: ' + result.error);
+      }
+    } catch (error) {
+      alert('❌ 添加失败: ' + error.message);
+    }
+  });
 }
 
 async function viewProviderModels(providerId) {
