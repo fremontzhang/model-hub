@@ -459,9 +459,9 @@ app.post('/api/switch-model', async (c) => {
     
     // 记录切换操作
     await c.env.DB.prepare(`
-      INSERT INTO model_switches (from_model_id, to_model_id, switch_type, reason, operator, executed_at, status)
-      VALUES (?, ?, 'full', ?, ?, CURRENT_TIMESTAMP, 'success')
-    `).bind(from_model_id, to_model_id, reason, operator).run()
+      INSERT INTO model_switches (from_model_id, to_model_id, switch_type, reason, operator, scenario, executed_at, status)
+      VALUES (?, ?, 'full', ?, ?, ?, CURRENT_TIMESTAMP, 'success')
+    `).bind(from_model_id, to_model_id, reason, operator, scenario).run()
     
     // 更新激活模型配置
     if (currentConfig) {

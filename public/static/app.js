@@ -161,7 +161,9 @@ async function renderDashboard() {
               <i class="fas fa-building mr-2 text-indigo-600"></i>
               厂商调用分布
             </h3>
-            <canvas id="providerChart" height="250"></canvas>
+            <div style="height: 280px;">
+              <canvas id="providerChart"></canvas>
+            </div>
           </div>
 
           <!-- 热门模型 -->
@@ -323,7 +325,7 @@ async function renderProviders() {
             <div class="bg-white rounded-xl p-6 shadow hover:shadow-lg transition">
               <div class="flex items-start justify-between mb-4">
                 <div class="flex items-center space-x-3">
-                  <img src="${provider.logo_url || 'https://via.placeholder.com/48'}" alt="${provider.name}" class="w-12 h-12 rounded-lg object-cover">
+                  <img src="${provider.logo_url || 'https://via.placeholder.com/48'}" alt="${provider.name}" class="w-12 h-12 rounded-lg object-contain bg-white" onerror="this.src='https://via.placeholder.com/48?text=${encodeURIComponent(provider.name.charAt(0))}'">
                   <div>
                     <h3 class="font-semibold text-gray-800">${provider.name}</h3>
                     <p class="text-xs text-gray-500">${provider.slug}</p>
@@ -342,12 +344,10 @@ async function renderProviders() {
                     ${provider.access_type === 'direct' ? '直连原厂' : '代理商'}
                   </span>
                 </div>
-                ${provider.proxy_name ? `
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">代理商</span>
-                    <span class="font-medium text-gray-800">${provider.proxy_name}</span>
-                  </div>
-                ` : ''}
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-500">${provider.access_type === 'proxy' ? '代理商名称' : '厂商标识'}</span>
+                  <span class="font-medium text-gray-800">${provider.access_type === 'proxy' ? (provider.proxy_name || '-') : provider.slug}</span>
+                </div>
                 <div class="flex items-center justify-between text-sm">
                   <span class="text-gray-500">模型数量</span>
                   <span class="font-medium text-gray-800">${provider.model_count || 0} 个</span>
@@ -408,11 +408,18 @@ async function renderModels() {
         <div class="flex items-center justify-between">
           <h2 class="text-2xl font-bold text-gray-800">
             <i class="fas fa-robot mr-2 text-indigo-600"></i>
-            模型列表
+            模型列表 ${window.currentProviderId ? '- ' + (window.currentProviderName || '') : ''}
           </h2>
-          <button onclick="showAddModelModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-            <i class="fas fa-plus mr-2"></i>添加模型
-          </button>
+          <div class="flex space-x-2">
+            ${window.currentProviderId ? `
+              <button onclick="renderProviders()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition">
+                <i class="fas fa-arrow-left mr-2"></i>返回厂商列表
+              </button>
+            ` : ''}
+            <button onclick="showAddModelModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              <i class="fas fa-plus mr-2"></i>添加模型
+            </button>
+          </div>
         </div>
 
         <!-- 模型表格 -->
@@ -537,7 +544,9 @@ async function renderStats() {
             <i class="fas fa-chart-line mr-2 text-indigo-600"></i>
             最近7天调用趋势
           </h3>
-          <canvas id="historyChart" height="100"></canvas>
+          <div style="height: 300px;">
+            <canvas id="historyChart"></canvas>
+          </div>
         </div>
 
         <!-- 费用统计 -->
@@ -819,7 +828,18 @@ async function renderSwitch() {
             切换历史记录
           </h3>
           <div class="space-y-3">
-            ${history.map(record => `
+            ${history.map(record => {
+              const scenarioLabels = {
+                'default': '🌍 全局默认',
+                'customer-service': '💬 客户服务',
+                'content-generation': '✍️ 内容生成',
+                'translation': '🌏 翻译服务',
+                'analysis': '📊 数据分析',
+                'summarization': '📑 文本摘要'
+              };
+              const scenarioLabel = scenarioLabels[record.scenario] || record.scenario;
+              
+              return `
               <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                 <div class="flex-1">
                   <div class="flex items-center space-x-3 mb-2">
@@ -831,6 +851,9 @@ async function renderSwitch() {
                     <span class="badge ${record.status === 'success' ? 'badge-success' : 'badge-danger'}">
                       ${record.status}
                     </span>
+                    ${record.scenario ? `
+                      <span class="badge badge-info">${scenarioLabel}</span>
+                    ` : ''}
                   </div>
                   <p class="text-xs text-gray-500 mb-1">
                     <i class="fas fa-user mr-1"></i>${record.operator} · 
@@ -839,7 +862,8 @@ async function renderSwitch() {
                   <p class="text-xs text-gray-600">${record.reason}</p>
                 </div>
               </div>
-            `).join('')}
+              `;
+            }).join('')}
             ${history.length === 0 ? '<p class="text-center text-gray-500 py-8">暂无切换记录</p>' : ''}
           </div>
         </div>
@@ -861,75 +885,227 @@ function showSwitchModal() {
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
   modal.innerHTML = `
-    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
       <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
         <h3 class="text-xl font-bold text-gray-800">
           <i class="fas fa-exchange-alt mr-2 text-indigo-600"></i>
-          选择目标模型
+          模型切换
         </h3>
         <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
           <i class="fas fa-times text-xl"></i>
         </button>
       </div>
       
-      <div class="p-6 space-y-3">
-        ${models.filter(m => m.status === 'active').map(model => `
-          <div class="p-4 border-2 border-gray-200 rounded-lg hover:border-indigo-500 cursor-pointer transition" onclick="selectModelForSwitch(${model.id}, '${model.display_name}')">
-            <div class="flex items-center justify-between">
-              <div class="flex-1">
-                <p class="font-semibold text-gray-800">${model.display_name}</p>
-                <p class="text-sm text-gray-500">${model.provider_name} · ${model.model_id}</p>
+      <div class="p-6">
+        <!-- 应用场景选择 -->
+        <div class="mb-6">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-layer-group mr-2 text-indigo-600"></i>
+            选择应用场景
+          </label>
+          <select id="scenarioSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            <option value="default">🌍 全局默认（所有应用）</option>
+            <option value="customer-service">💬 客户服务</option>
+            <option value="content-generation">✍️ 内容生成</option>
+            <option value="translation">🌏 翻译服务</option>
+            <option value="analysis">📊 数据分析</option>
+            <option value="summarization">📑 文本摘要</option>
+          </select>
+          <p class="text-xs text-gray-500 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            选择“全局默认”将应用于所有场景，选择特定场景则仅影响该场景
+          </p>
+        </div>
+
+        <!-- 切换原因选择 -->
+        <div class="mb-6">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-clipboard-list mr-2 text-indigo-600"></i>
+            切换原因
+          </label>
+          <select id="reasonSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            <option value="性能优化">⚡ 性能优化 - 提升响应速度</option>
+            <option value="成本优化">💰 成本优化 - 降低运营费用</option>
+            <option value="功能扩展">🚀 功能扩展 - 使用新特性</option>
+            <option value="故障转移">⚠️ 故障转移 - 原模型不可用</option>
+            <option value="测试验证">🧪 测试验证 - 新模型测试</option>
+            <option value="其他">📝 其他原因</option>
+          </select>
+        </div>
+
+        <!-- 自定义原因输入 -->
+        <div id="customReasonDiv" class="mb-6 hidden">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            请输入具体原因
+          </label>
+          <input type="text" id="customReasonInput" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="请详细描述切换原因...">
+        </div>
+
+        <!-- 操作人员 -->
+        <div class="mb-6">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-user mr-2 text-indigo-600"></i>
+            操作人员
+          </label>
+          <input type="text" id="operatorInput" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="请输入操作人员姓名" value="admin">
+        </div>
+
+        <!-- 目标模型选择 -->
+        <div class="mb-4">
+          <label class="block text-sm font-semibold text-gray-700 mb-3">
+            <i class="fas fa-robot mr-2 text-indigo-600"></i>
+            选择目标模型
+          </label>
+          <div class="space-y-2 max-h-64 overflow-y-auto">
+            ${models.filter(m => m.status === 'active').map(model => `
+              <div class="model-option p-4 border-2 border-gray-200 rounded-lg hover:border-indigo-500 cursor-pointer transition" data-model-id="${model.id}" data-model-name="${model.display_name}">
+                <div class="flex items-center justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-2 mb-1">
+                      <p class="font-semibold text-gray-800">${model.display_name}</p>
+                      <span class="badge badge-info">${model.model_type}</span>
+                    </div>
+                    <p class="text-sm text-gray-500">${model.provider_name} · ${model.model_id}</p>
+                  </div>
+                  <div class="text-right">
+                    ${model.billing_type === 'token' ? `
+                      <p class="text-xs text-gray-500">计费</p>
+                      <p class="text-xs text-gray-700">
+                        In: ${formatCost(model.input_price)}/1K<br>
+                        Out: ${formatCost(model.output_price)}/1K
+                      </p>
+                    ` : '-'}
+                  </div>
+                </div>
               </div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500">计费</p>
-                ${model.billing_type === 'token' ? `
-                  <p class="text-xs text-gray-700">
-                    In: ${formatCost(model.input_price)}/1K<br>
-                    Out: ${formatCost(model.output_price)}/1K
-                  </p>
-                ` : '-'}
-              </div>
-            </div>
+            `).join('')}
           </div>
-        `).join('')}
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="flex justify-end space-x-3 pt-4 border-t">
+          <button onclick="this.closest('.fixed').remove()" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium">
+            <i class="fas fa-times mr-2"></i>取消
+          </button>
+          <button id="confirmSwitchBtn" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold" disabled>
+            <i class="fas fa-check mr-2"></i>确认切换
+          </button>
+        </div>
       </div>
     </div>
   `;
   
   document.body.appendChild(modal);
+  
+  // 绑定事件
+  let selectedModelId = null;
+  let selectedModelName = '';
+  
+  // 模型选择
+  modal.querySelectorAll('.model-option').forEach(option => {
+    option.addEventListener('click', function() {
+      modal.querySelectorAll('.model-option').forEach(opt => {
+        opt.classList.remove('border-indigo-500', 'bg-indigo-50');
+      });
+      this.classList.add('border-indigo-500', 'bg-indigo-50');
+      
+      selectedModelId = this.dataset.modelId;
+      selectedModelName = this.dataset.modelName;
+      
+      // 启用确认按钮
+      document.getElementById('confirmSwitchBtn').disabled = false;
+    });
+  });
+  
+  // 切换原因变化
+  document.getElementById('reasonSelect').addEventListener('change', function() {
+    const customDiv = document.getElementById('customReasonDiv');
+    if (this.value === '其他') {
+      customDiv.classList.remove('hidden');
+    } else {
+      customDiv.classList.add('hidden');
+    }
+  });
+  
+  // 确认切换
+  document.getElementById('confirmSwitchBtn').addEventListener('click', async function() {
+    if (!selectedModelId) {
+      alert('请选择目标模型');
+      return;
+    }
+    
+    const scenario = document.getElementById('scenarioSelect').value;
+    const reasonSelect = document.getElementById('reasonSelect').value;
+    const customReason = document.getElementById('customReasonInput').value;
+    const operator = document.getElementById('operatorInput').value;
+    
+    const reason = reasonSelect === '其他' ? customReason : reasonSelect;
+    
+    if (!reason) {
+      alert('请输入切换原因');
+      return;
+    }
+    
+    if (!operator) {
+      alert('请输入操作人员');
+      return;
+    }
+    
+    // 禁用按钮，显示加载状态
+    this.disabled = true;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>切换中...';
+    
+    try {
+      const response = await fetch('/api/switch-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_model_id: selectedModelId,
+          reason: reason,
+          operator: operator,
+          scenario: scenario
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // 显示成功提示
+        const successDiv = document.createElement('div');
+        successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+        successDiv.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-check-circle text-2xl"></i>
+            <div>
+              <p class="font-semibold">模型切换成功！</p>
+              <p class="text-sm">已切换到: ${selectedModelName}</p>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(successDiv);
+        
+        setTimeout(() => {
+          successDiv.remove();
+        }, 3000);
+        
+        modal.remove();
+        renderSwitch();
+      } else {
+        alert('❓ 切换失败: ' + result.error);
+        this.disabled = false;
+        this.innerHTML = '<i class="fas fa-check mr-2"></i>确认切换';
+      }
+    } catch (error) {
+      alert('❓ 切换失败: ' + error.message);
+      this.disabled = false;
+      this.innerHTML = '<i class="fas fa-check mr-2"></i>确认切换';
+    }
+  });
 }
 
-// 选择模型进行切换
+// 选择模型进行切换（保留用于向后兼容）
 async function selectModelForSwitch(modelId, modelName) {
-  const reason = prompt(`请输入切换原因（切换到: ${modelName}）:`, '性能优化');
-  if (!reason) return;
-  
-  const operator = prompt('请输入操作人员:', 'admin');
-  if (!operator) return;
-  
-  try {
-    const response = await fetch('/api/switch-model', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to_model_id: modelId,
-        reason: reason,
-        operator: operator
-      })
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      alert('✅ 模型切换成功！');
-      document.querySelector('.fixed').remove();
-      renderSwitch();
-    } else {
-      alert('❌ 切换失败: ' + result.error);
-    }
-  } catch (error) {
-    alert('❌ 切换失败: ' + error.message);
-  }
+  showSwitchModal();
 }
 
 // 占位函数（后续可实现）
@@ -937,8 +1113,21 @@ function showAddProviderModal() {
   alert('添加厂商功能开发中...');
 }
 
-function viewProviderModels(providerId) {
+async function viewProviderModels(providerId) {
   currentPage = 'models';
+  window.currentProviderId = providerId;
+  
+  // 获取厂商信息
+  try {
+    const response = await fetch(`/api/providers/${providerId}`);
+    const result = await response.json();
+    if (result.success) {
+      window.currentProviderName = result.data.name;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  
   renderModels();
 }
 
